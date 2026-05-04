@@ -39,13 +39,6 @@ type Player = {
   springTimer: number;
 };
 
-type Rect = {
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-};
-
 const GAME_WIDTH = 390;
 const GAME_HEIGHT = 720;
 const GRAVITY = 980;
@@ -59,6 +52,12 @@ const STORAGE_KEY = "venusJump.highScore.v1";
 const PLAYER_WIDTH = 58;
 const MAX_JUMP_HEIGHT = 150;
 const MAX_AIR_CONTROL_DISTANCE = 290;
+const ROOM_SCORE_SPAN = 1500;
+const ROOM_TRANSITION_START = 0.84;
+const COLLECTIBLE_DRAW_SIZE = 62;
+const PLATFORM_SIDE_PADDING = 28;
+const MOVING_PLATFORM_DRAW_HEIGHT = 60;
+const MOVING_PLATFORM_DRAW_WIDTH = 160;
 
 const app = document.querySelector<HTMLDivElement>("#app");
 
@@ -96,6 +95,7 @@ app.innerHTML = `
           <button type="button" data-testid="debug-generator">Platform Testi</button>
           <button type="button" data-testid="debug-bonus">Bonus Testi</button>
           <button type="button" data-testid="debug-highscore">Highscore Testi</button>
+          <button type="button" data-testid="debug-gameover">Game Over Testi</button>
           <button type="button" data-testid="debug-mobile">Mobil Dar Görünüm</button>
         </div>
         <pre class="debug-output" data-testid="debug-output">Hazır</pre>
@@ -110,10 +110,11 @@ const scoreNodeElement = document.querySelector<HTMLDivElement>("[data-testid='s
 const highScoreNodeElement = document.querySelector<HTMLDivElement>("[data-testid='highscore']");
 const livesNodeElement = document.querySelector<HTMLDivElement>("[data-testid='lives']");
 const bonusNodeElement = document.querySelector<HTMLDivElement>("[data-testid='bonus']");
+const hudNodeElement = document.querySelector<HTMLDivElement>(".hud");
 const debugPanel = document.querySelector<HTMLDivElement>("[data-testid='debug-panel']");
 const debugOutput = document.querySelector<HTMLPreElement>("[data-testid='debug-output']");
 
-if (!canvasNode || !overlayNode || !scoreNodeElement || !highScoreNodeElement || !livesNodeElement || !bonusNodeElement) {
+if (!canvasNode || !overlayNode || !scoreNodeElement || !highScoreNodeElement || !livesNodeElement || !bonusNodeElement || !hudNodeElement) {
   throw new Error("Required UI nodes are missing");
 }
 
@@ -123,6 +124,7 @@ const scoreNode = scoreNodeElement;
 const highScoreNode = highScoreNodeElement;
 const livesNode = livesNodeElement;
 const bonusNode = bonusNodeElement;
+const hudNode = hudNodeElement;
 
 const canvasContext = canvas.getContext("2d");
 
@@ -134,42 +136,36 @@ const ctx = canvasContext;
 
 ctx.imageSmoothingEnabled = false;
 
-const atlasImage = loadImage("/assets/venus-jump-atlas-transparent.png");
-const venusImage = loadImage("/assets/venus-spritesheet.webp");
+const assetRoot = "/assets";
+const roomImages = [
+  loadImage(`${assetRoot}/rooms/bedroom.png`),
+  loadImage(`${assetRoot}/rooms/sunroom.png`),
+  loadImage(`${assetRoot}/rooms/attic.png`)
+];
 
-const atlasRects = {
-  food: { x: 850, y: 150, w: 170, h: 140 },
-  yarn: { x: 1032, y: 138, w: 150, h: 155 },
-  feather: { x: 1192, y: 128, w: 138, h: 170 },
-  bell: { x: 1370, y: 125, w: 142, h: 170 },
-  shelf: { x: 38, y: 398, w: 440, h: 130 },
-  cushion: { x: 505, y: 418, w: 285, h: 125 },
-  cracked: { x: 812, y: 416, w: 320, h: 135 },
-  moving: { x: 1180, y: 425, w: 335, h: 135 },
-  room: { x: 24, y: 586, w: 1488, h: 420 }
-} satisfies Record<string, Rect>;
+const platformImages = {
+  normal: loadImage(`${assetRoot}/platforms/normal-shelf.png`),
+  cushion: loadImage(`${assetRoot}/platforms/bouncy-cushion.png`),
+  cracked: loadImage(`${assetRoot}/platforms/cracked-shelf.png`),
+  moving: loadImage(`${assetRoot}/platforms/moving-shelf.png`)
+} satisfies Record<PlatformKind, HTMLImageElement>;
 
-const spriteFrame = { w: 192, h: 208 };
-const animations = {
+const collectibleImages = {
+  food: loadImage(`${assetRoot}/collectibles/cat-food.png`),
+  yarn: loadImage(`${assetRoot}/collectibles/yarn-ball.png`),
+  feather: loadImage(`${assetRoot}/collectibles/feather.png`),
+  bell: loadImage(`${assetRoot}/collectibles/gold-bell.png`)
+} satisfies Record<CollectibleKind, HTMLImageElement>;
+
+const playerImages = {
+  jumpRight: loadImage(`${assetRoot}/player/jump-right.png`),
+  jumpLeft: loadImage(`${assetRoot}/player/jump-left.png`),
+  fallRight: loadImage(`${assetRoot}/player/fall-right.png`),
+  fallLeft: loadImage(`${assetRoot}/player/fall-left.png`),
   idle: [
-    { row: 0, col: 0 },
-    { row: 0, col: 2 },
-    { row: 0, col: 5 }
-  ],
-  jump: [
-    { row: 1, col: 2 },
-    { row: 1, col: 3 },
-    { row: 2, col: 4 }
-  ],
-  fall: [
-    { row: 1, col: 0 },
-    { row: 2, col: 1 },
-    { row: 2, col: 2 }
-  ],
-  happy: [
-    { row: 3, col: 0 },
-    { row: 3, col: 1 },
-    { row: 3, col: 2 }
+    loadImage(`${assetRoot}/player/idle/idle-01.png`),
+    loadImage(`${assetRoot}/player/idle/idle-02.png`),
+    loadImage(`${assetRoot}/player/idle/idle-03.png`)
   ]
 };
 
@@ -257,10 +253,15 @@ function createNextPlatform(previous: Platform, index: number, currentScore: num
   const verticalGap = minGap + random() * (maxGap - minGap);
   const maxHorizontal = Math.min(MAX_AIR_CONTROL_DISTANCE, 110 + difficulty * 60);
   const center = previous.x + previous.width / 2;
+  const roomSweep = Math.sin((index + currentScore / 180) * 0.72);
+  const roomTarget = GAME_WIDTH / 2 + roomSweep * GAME_WIDTH * 0.28;
+  const centerPull = (roomTarget - center) * (0.18 + difficulty * 0.1);
+  const jitter = (random() * 2 - 1) * maxHorizontal * 0.68;
+  const nextDelta = clamp(centerPull + jitter, -maxHorizontal, maxHorizontal);
   const targetCenter = clamp(
-    center + (random() * 2 - 1) * maxHorizontal,
-    width / 2 + 16,
-    GAME_WIDTH - width / 2 - 16
+    center + nextDelta,
+    width / 2 + PLATFORM_SIDE_PADDING,
+    GAME_WIDTH - width / 2 - PLATFORM_SIDE_PADDING
   );
   const kindRoll = random();
   const kind: PlatformKind =
@@ -286,8 +287,8 @@ function maybeCreateCollectible(platform: Platform, index: number, random = rng)
   return {
     id: collectibleId++,
     kind,
-    x: platform.x + platform.width / 2 - 16,
-    y: platform.y - 44,
+    x: platform.x + platform.width / 2 - 18,
+    y: platform.y - 70,
     collected: false
   };
 }
@@ -331,6 +332,7 @@ function showInfo(kind: "controls" | "about"): void {
 function updateOverlay(): void {
   const isVisible = screen !== "playing" && screen !== "paused";
   overlay.dataset.visible = String(isVisible);
+  hudNode.dataset.visible = String(screen === "playing" || screen === "paused");
 
   if (screen === "menu") {
     overlay.innerHTML = `
@@ -375,6 +377,7 @@ function updateOverlay(): void {
       <div class="screen pixel-panel">
         <h1 class="screen-title">Venus biraz dinleniyor</h1>
         <p class="screen-copy" data-testid="final-score">Skor ${Math.floor(score)} · Rekor ${highScore}</p>
+        <div class="game-over-cat" aria-label="Dinlenen Venus"></div>
         <button class="menu-button" type="button" data-testid="restart-button">Tekrar Oyna</button>
         <button class="menu-button menu-button--secondary" type="button" data-testid="menu-button">Menü</button>
       </div>
@@ -438,12 +441,12 @@ function updatePlatforms(dt: number): void {
     }
 
     platform.x += platform.direction * platform.speed * dt;
-    if (platform.x < 10) {
-      platform.x = 10;
+    if (platform.x < PLATFORM_SIDE_PADDING) {
+      platform.x = PLATFORM_SIDE_PADDING;
       platform.direction = 1;
     }
-    if (platform.x + platform.width > GAME_WIDTH - 10) {
-      platform.x = GAME_WIDTH - 10 - platform.width;
+    if (platform.x + platform.width > GAME_WIDTH - PLATFORM_SIDE_PADDING) {
+      platform.x = GAME_WIDTH - PLATFORM_SIDE_PADDING - platform.width;
       platform.direction = -1;
     }
   }
@@ -565,27 +568,34 @@ function checkFall(): void {
 function draw(): void {
   ctx.clearRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
   drawBackground();
-  drawCollectibles();
-  drawPlatforms();
-  drawPlayer();
 
   if (screen === "menu" || screen === "controls" || screen === "about") {
     drawMenuBackdrop();
+    return;
   }
 
-  if (screen === "gameOver") {
-    drawGameOverPlayer();
+  drawPlatforms();
+  drawCollectibles();
+  if (screen !== "gameOver") {
+    drawPlayer();
   }
 }
 
 function drawBackground(): void {
-  const image = atlasImage;
-  const room = atlasRects.room;
-  const parallax = ((cameraY * 0.18) % room.h + room.h) % room.h;
+  const cycle = Math.max(0, score) / ROOM_SCORE_SPAN;
+  const currentIndex = Math.floor(cycle) % roomImages.length;
+  const nextIndex = (currentIndex + 1) % roomImages.length;
+  const cycleProgress = cycle - Math.floor(cycle);
+  const transitionAmount = cycleProgress <= ROOM_TRANSITION_START ? 0 : (cycleProgress - ROOM_TRANSITION_START) / (1 - ROOM_TRANSITION_START);
+  const current = roomImages[currentIndex];
+  const next = roomImages[nextIndex];
 
-  if (image.complete && image.naturalWidth > 0) {
-    ctx.drawImage(image, room.x, room.y, room.w, room.h, 0, parallax - GAME_HEIGHT, GAME_WIDTH, GAME_HEIGHT);
-    ctx.drawImage(image, room.x, room.y, room.w, room.h, 0, parallax, GAME_WIDTH, GAME_HEIGHT);
+  if (current.complete && current.naturalWidth > 0) {
+    const transitionY = Math.round(transitionAmount * GAME_HEIGHT);
+    drawRoomImage(current, 0.5, transitionY);
+    if (transitionAmount > 0 && next.complete && next.naturalWidth > 0) {
+      drawRoomImage(next, 0.5, transitionY - GAME_HEIGHT);
+    }
   } else {
     const gradient = ctx.createLinearGradient(0, 0, 0, GAME_HEIGHT);
     gradient.addColorStop(0, "#08122a");
@@ -596,6 +606,25 @@ function drawBackground(): void {
 
   ctx.fillStyle = "rgba(6, 13, 30, 0.26)";
   ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+}
+
+function drawRoomImage(image: HTMLImageElement, pan: number, dy: number): void {
+  const sourceRatio = image.naturalWidth / image.naturalHeight;
+  const targetRatio = GAME_WIDTH / GAME_HEIGHT;
+  let sx = 0;
+  let sy = 0;
+  let sw = image.naturalWidth;
+  let sh = image.naturalHeight;
+
+  if (sourceRatio > targetRatio) {
+    sw = image.naturalHeight * targetRatio;
+    sx = (image.naturalWidth - sw) * clamp(pan, 0, 1);
+  } else {
+    sh = image.naturalWidth / targetRatio;
+    sy = (image.naturalHeight - sh) * 0.5;
+  }
+
+  ctx.drawImage(image, sx, sy, sw, sh, 0, dy, GAME_WIDTH, GAME_HEIGHT);
 }
 
 function drawMenuBackdrop(): void {
@@ -610,38 +639,68 @@ function drawPlatforms(): void {
       continue;
     }
 
-    const rect =
-      platform.kind === "moving"
-        ? atlasRects.moving
-        : platform.kind === "cracked"
-          ? atlasRects.cracked
-          : platform.kind === "cushion"
-            ? atlasRects.cushion
-            : atlasRects.shelf;
-
-    drawAtlas(rect, platform.x - 8, y - 22, platform.width + 16, 58);
+    const isSoftPlatform = platform.kind === "cushion" || platform.kind === "cracked";
+    const platformHeight = isSoftPlatform ? 70 : MOVING_PLATFORM_DRAW_HEIGHT;
+    const platformY = isSoftPlatform ? y - 31 : y - 24;
+    const platformWidth = platform.kind === "moving" ? MOVING_PLATFORM_DRAW_WIDTH : platform.width + 16;
+    const platformX = platform.kind === "moving" ? platform.x + platform.width / 2 - platformWidth / 2 : platform.x - 8;
+    drawPlatformShadow(platformX, platformY + platformHeight - 14, platformWidth, 18);
+    drawImageAsset(platformImages[platform.kind], platformX, platformY, platformWidth, platformHeight);
   }
+}
+
+function drawPlatformShadow(dx: number, dy: number, dw: number, dh: number): void {
+  ctx.save();
+  ctx.fillStyle = "rgba(7, 9, 18, 0.36)";
+  ctx.beginPath();
+  ctx.ellipse(dx + dw / 2, dy + dh / 2, dw * 0.46, dh * 0.5, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
 }
 
 function drawCollectibles(): void {
   for (const collectible of collectibles) {
     const y = collectible.y - cameraY;
-    if (y < -50 || y > GAME_HEIGHT + 50) {
+    if (y < -80 || y > GAME_HEIGHT + 80) {
       continue;
     }
 
-    const rect = atlasRects[collectible.kind];
-    drawAtlas(rect, collectible.x - 8, y - 8, 50, 50);
+    const drawX = collectible.x + 18 - COLLECTIBLE_DRAW_SIZE / 2;
+    const drawY = y + 18 - COLLECTIBLE_DRAW_SIZE / 2;
+    drawImageAsset(collectibleImages[collectible.kind], drawX, drawY, COLLECTIBLE_DRAW_SIZE, COLLECTIBLE_DRAW_SIZE);
   }
 }
 
 function drawPlayer(): void {
   const y = player.y - cameraY;
-  const state = screen === "playing" && player.vy > 120 ? "fall" : screen === "playing" ? "jump" : "idle";
-  const frames = animations[state];
-  const frame = frames[Math.floor(performance.now() / 110) % frames.length];
-  drawVenusFrame(frame.row, frame.col, player.x - 28, y - 36, 116, 126, player.facing);
 
+  if (screen === "playing") {
+    const isFalling = player.vy > 120;
+    const image = isFalling
+      ? player.facing > 0
+        ? playerImages.fallRight
+        : playerImages.fallLeft
+      : player.facing > 0
+        ? playerImages.jumpRight
+        : playerImages.jumpLeft;
+    const breathe = Math.sin(performance.now() / 130) * 1.5;
+    const drawSize = isFalling ? 148 : 154;
+    const drawX = player.x + player.width / 2 - drawSize / 2;
+    const drawY = y + player.height / 2 - drawSize * 0.58 + breathe;
+    const safeDrawX = clamp(drawX, 0, GAME_WIDTH - drawSize);
+    drawImageAsset(image, safeDrawX, drawY, drawSize, drawSize);
+    drawShield(y);
+    return;
+  }
+
+  const frame = playerImages.idle[Math.floor(performance.now() / 110) % playerImages.idle.length];
+  const idleSize = 126;
+  drawMirroredImageAsset(frame, player.x + player.width / 2 - idleSize / 2, y - 40, idleSize, idleSize, player.facing, "#d9bd83");
+
+  drawShield(y);
+}
+
+function drawShield(y: number): void {
   if (player.shieldTimer > 0) {
     ctx.strokeStyle = "rgba(255, 209, 92, 0.82)";
     ctx.lineWidth = 3;
@@ -651,36 +710,26 @@ function drawPlayer(): void {
   }
 }
 
-function drawGameOverPlayer(): void {
-  drawVenusFrame(5, 6, GAME_WIDTH / 2 - 72, GAME_HEIGHT - 168, 144, 112, 1);
-}
-
-function drawVenusFrame(row: number, col: number, dx: number, dy: number, dw: number, dh: number, facing: -1 | 1): void {
-  if (!venusImage.complete || venusImage.naturalWidth === 0) {
-    ctx.fillStyle = "#d9bd83";
-    ctx.fillRect(dx + 22, dy + 20, dw - 44, dh - 28);
-    return;
-  }
-
+function drawMirroredImageAsset(image: HTMLImageElement, dx: number, dy: number, dw: number, dh: number, facing: -1 | 1, fallbackStyle = "#ffd15c"): void {
   ctx.save();
   if (facing < 0) {
     ctx.translate(dx + dw, dy);
     ctx.scale(-1, 1);
-    ctx.drawImage(venusImage, col * spriteFrame.w, row * spriteFrame.h, spriteFrame.w, spriteFrame.h, 0, 0, dw, dh);
+    drawImageAsset(image, 0, 0, dw, dh, fallbackStyle);
   } else {
-    ctx.drawImage(venusImage, col * spriteFrame.w, row * spriteFrame.h, spriteFrame.w, spriteFrame.h, dx, dy, dw, dh);
+    drawImageAsset(image, dx, dy, dw, dh, fallbackStyle);
   }
   ctx.restore();
 }
 
-function drawAtlas(rect: Rect, dx: number, dy: number, dw: number, dh: number): void {
-  if (!atlasImage.complete || atlasImage.naturalWidth === 0) {
-    ctx.fillStyle = "#ffd15c";
+function drawImageAsset(image: HTMLImageElement, dx: number, dy: number, dw: number, dh: number, fallbackStyle = "#ffd15c"): void {
+  if (!image.complete || image.naturalWidth === 0) {
+    ctx.fillStyle = fallbackStyle;
     ctx.fillRect(dx, dy, dw, dh);
     return;
   }
 
-  ctx.drawImage(atlasImage, rect.x, rect.y, rect.w, rect.h, dx, dy, dw, dh);
+  ctx.drawImage(image, dx, dy, dw, dh);
 }
 
 function updateHud(): void {
@@ -903,13 +952,21 @@ document.querySelector<HTMLButtonElement>("[data-testid='debug-highscore']")?.ad
   }
 });
 
+document.querySelector<HTMLButtonElement>("[data-testid='debug-gameover']")?.addEventListener("click", () => {
+  score = Math.max(score, 1305);
+  screen = "gameOver";
+  updateOverlay();
+  updateHud();
+  setDebugOutput("OK game over paneli gösteriliyor.");
+});
+
 document.querySelector<HTMLButtonElement>("[data-testid='debug-mobile']")?.addEventListener("click", () => {
   document.querySelector<HTMLElement>(".game-frame")?.style.setProperty("width", "390px");
   document.querySelector<HTMLElement>(".game-frame")?.style.setProperty("height", "720px");
   setDebugOutput("OK mobil dar görünüm simülasyonu aktif.");
 });
 
-wireMenuButtons();
+updateOverlay();
 updateHud();
 seedWorld();
 requestAnimationFrame(gameLoop);

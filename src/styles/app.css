@@ -113,20 +113,45 @@ canvas {
 }
 
 .logo {
-  width: min(92%, 310px);
-  aspect-ratio: 520 / 300;
-  background: url("/assets/venus-jump-atlas-transparent.png") 0 3% / 295% auto no-repeat;
+  width: min(96%, 330px);
+  aspect-ratio: 633 / 412;
+  background: url("/assets/ui/venus-jump-logo.png") center / contain no-repeat;
   image-rendering: pixelated;
   filter: drop-shadow(0 6px 0 rgba(0, 0, 0, 0.3));
 }
 
 .menu-cat {
-  width: min(48vw, 190px);
-  max-width: 190px;
+  position: relative;
+  width: min(56vw, 220px);
+  max-width: 220px;
   aspect-ratio: 1;
-  background: url("/assets/venus-jump-atlas-transparent.png") 43% 0 / 560% auto no-repeat;
+  background: url("/assets/menu/venus-menu-cat.png") center / contain no-repeat;
   image-rendering: pixelated;
   filter: drop-shadow(0 8px 0 rgba(0, 0, 0, 0.3));
+}
+
+.menu-cat::after {
+  position: absolute;
+  inset: 0;
+  content: "";
+  background: url("/assets/menu/venus-menu-cat-blink.png") center / contain no-repeat;
+  image-rendering: pixelated;
+  opacity: 0;
+  animation: menu-cat-blink 4.8s steps(1, end) infinite;
+}
+
+@keyframes menu-cat-blink {
+  0%,
+  86%,
+  91%,
+  100% {
+    opacity: 0;
+  }
+
+  88%,
+  89% {
+    opacity: 1;
+  }
 }
 
 .menu-actions {
@@ -183,6 +208,15 @@ canvas {
   line-height: 1.55;
 }
 
+.game-over-cat {
+  width: min(58vw, 176px);
+  height: 92px;
+  margin: -2px 0 2px;
+  background: url("/assets/player/game-over-rest.png") center / 176px 176px no-repeat;
+  image-rendering: pixelated;
+  filter: drop-shadow(0 8px 0 rgba(0, 0, 0, 0.28));
+}
+
 .screen-list {
   display: grid;
   gap: 10px;
@@ -209,6 +243,10 @@ canvas {
   justify-content: space-between;
   gap: 8px;
   pointer-events: none;
+}
+
+.hud[data-visible="false"] {
+  display: none;
 }
 
 .hud-group {
