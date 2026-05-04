@@ -2,6 +2,7 @@ const WIDTH = 390;
 const MAX_JUMP_HEIGHT = 150;
 const PLAYER_WIDTH = 58;
 const MAX_AIR_CONTROL_DISTANCE = 290;
+const PLATFORM_SIDE_PADDING = 28;
 
 function mulberry32(seed) {
   let value = seed >>> 0;
@@ -26,9 +27,19 @@ function nextPlatform(previous, index, score, random) {
   const verticalGap = minGap + random() * (maxGap - minGap);
   const maxHorizontal = Math.min(MAX_AIR_CONTROL_DISTANCE, 110 + difficulty * 60);
   const center = previous.x + previous.width / 2;
+  const roomSweep = Math.sin((index + score / 180) * 0.72);
+  const roomTarget = WIDTH / 2 + roomSweep * WIDTH * 0.28;
+  const centerPull = (roomTarget - center) * (0.18 + difficulty * 0.1);
+  const jitter = (random() * 2 - 1) * maxHorizontal * 0.68;
+  const minHorizontalShift = 34 + difficulty * 34;
+  let nextDelta = Math.max(-maxHorizontal, Math.min(maxHorizontal, centerPull + jitter));
+  if (Math.abs(nextDelta) < minHorizontalShift) {
+    const inwardDirection = center < WIDTH * 0.38 ? 1 : center > WIDTH * 0.62 ? -1 : random() > 0.5 ? 1 : -1;
+    nextDelta = inwardDirection * minHorizontalShift;
+  }
   const targetCenter = Math.max(
-    width / 2 + 16,
-    Math.min(WIDTH - width / 2 - 16, center + (random() * 2 - 1) * maxHorizontal)
+    width / 2 + PLATFORM_SIDE_PADDING,
+    Math.min(WIDTH - width / 2 - PLATFORM_SIDE_PADDING, center + nextDelta)
   );
   return {
     id: index,

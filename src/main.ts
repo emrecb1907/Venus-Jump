@@ -58,6 +58,13 @@ const COLLECTIBLE_DRAW_SIZE = 62;
 const PLATFORM_SIDE_PADDING = 28;
 const MOVING_PLATFORM_DRAW_HEIGHT = 60;
 const MOVING_PLATFORM_DRAW_WIDTH = 160;
+const MAX_FOOD_LIVES = 3;
+const COLLECTIBLE_SPAWN_CHANCE = 0.22;
+const FOOD_COLLECTIBLE_CHANCE = 0.08;
+const RESPAWN_DROP_HEIGHT = 145;
+const RESPAWN_TOP_PADDING = 36;
+const RESPAWN_PLATFORM_CLEARANCE = 12;
+const RESPAWN_FALL_SPEED = 90;
 
 const app = document.querySelector<HTMLDivElement>("#app");
 
@@ -139,8 +146,11 @@ ctx.imageSmoothingEnabled = false;
 const assetRoot = "/assets";
 const roomImages = [
   loadImage(`${assetRoot}/rooms/bedroom.png`),
+  loadImage(`${assetRoot}/rooms/city-passage.png`),
   loadImage(`${assetRoot}/rooms/sunroom.png`),
-  loadImage(`${assetRoot}/rooms/attic.png`)
+  loadImage(`${assetRoot}/rooms/city-courtyard.png`),
+  loadImage(`${assetRoot}/rooms/attic.png`),
+  loadImage(`${assetRoot}/rooms/city-backstreet.png`)
 ];
 
 const platformImages = {
@@ -257,7 +267,12 @@ function createNextPlatform(previous: Platform, index: number, currentScore: num
   const roomTarget = GAME_WIDTH / 2 + roomSweep * GAME_WIDTH * 0.28;
   const centerPull = (roomTarget - center) * (0.18 + difficulty * 0.1);
   const jitter = (random() * 2 - 1) * maxHorizontal * 0.68;
-  const nextDelta = clamp(centerPull + jitter, -maxHorizontal, maxHorizontal);
+  const minHorizontalShift = 34 + difficulty * 34;
+  let nextDelta = clamp(centerPull + jitter, -maxHorizontal, maxHorizontal);
+  if (Math.abs(nextDelta) < minHorizontalShift) {
+    const inwardDirection = center < GAME_WIDTH * 0.38 ? 1 : center > GAME_WIDTH * 0.62 ? -1 : random() > 0.5 ? 1 : -1;
+    nextDelta = inwardDirection * minHorizontalShift;
+  }
   const targetCenter = clamp(
     center + nextDelta,
     width / 2 + PLATFORM_SIDE_PADDING,
@@ -278,12 +293,11 @@ function createNextPlatform(previous: Platform, index: number, currentScore: num
 }
 
 function maybeCreateCollectible(platform: Platform, index: number, random = rng): Collectible | undefined {
-  if (index < 4 || random() > 0.24) {
+  if (index < 4 || random() > COLLECTIBLE_SPAWN_CHANCE) {
     return undefined;
   }
 
-  const roll = random();
-  const kind: CollectibleKind = roll > 0.82 ? "food" : roll > 0.58 ? "bell" : roll > 0.3 ? "yarn" : "feather";
+  const kind = chooseCollectibleKind(random);
   return {
     id: collectibleId++,
     kind,
@@ -291,6 +305,20 @@ function maybeCreateCollectible(platform: Platform, index: number, random = rng)
     y: platform.y - 70,
     collected: false
   };
+}
+
+function chooseCollectibleKind(random = rng): CollectibleKind {
+  if (canSpawnFoodCollectible() && random() < FOOD_COLLECTIBLE_CHANCE) {
+    return "food";
+  }
+
+  const roll = random();
+  return roll > 0.66 ? "bell" : roll > 0.33 ? "yarn" : "feather";
+}
+
+function canSpawnFoodCollectible(): boolean {
+  const activeFoodCount = collectibles.filter((collectible) => !collectible.collected && collectible.kind === "food").length;
+  return player.lives + activeFoodCount < MAX_FOOD_LIVES;
 }
 
 function seedWorld(): void {
@@ -415,11 +443,7 @@ function update(dt: number): void {
     player.facing = inputDirection > 0 ? 1 : -1;
   }
 
-  if (player.x + player.width < 0) {
-    player.x = GAME_WIDTH;
-  } else if (player.x > GAME_WIDTH) {
-    player.x = -player.width;
-  }
+  resolvePlayerBounds();
 
   player.shieldTimer = Math.max(0, player.shieldTimer - dt);
   player.controlTimer = Math.max(0, player.controlTimer - dt);
@@ -432,6 +456,18 @@ function update(dt: number): void {
   recycleWorld();
   checkFall();
   updateHud();
+}
+
+function resolvePlayerBounds(): void {
+  if (player.x < 0) {
+    player.x = 0;
+    player.vx = Math.max(0, player.vx);
+  }
+
+  if (player.x + player.width > GAME_WIDTH) {
+    player.x = GAME_WIDTH - player.width;
+    player.vx = Math.min(0, player.vx);
+  }
 }
 
 function updatePlatforms(dt: number): void {
@@ -498,7 +534,7 @@ function resolveCollectibles(): void {
     score += 95;
 
     if (collectible.kind === "food") {
-      player.lives = Math.min(3, player.lives + 1);
+      player.lives = Math.min(MAX_FOOD_LIVES, player.lives + 1);
     }
     if (collectible.kind === "yarn") {
       player.springTimer = 8;
@@ -548,21 +584,39 @@ function checkFall(): void {
     return;
   }
 
-  if ((player.lives > 0 || player.shieldTimer > 0) && lastSafePlatform) {
-    if (player.lives > 0) {
-      player.lives -= 1;
-    }
-    player.x = clamp(lastSafePlatform.x + lastSafePlatform.width / 2 - player.width / 2, 0, GAME_WIDTH - player.width);
-    player.y = lastSafePlatform.y - player.height - 8;
-    player.previousY = player.y;
-    player.vx = 0;
-    player.vy = BASE_JUMP;
-    player.shieldTimer = Math.max(player.shieldTimer, 1.4);
+  if (recoverFromFall()) {
     return;
   }
 
   screen = "gameOver";
   updateOverlay();
+}
+
+function recoverFromFall(): boolean {
+  if (!lastSafePlatform || (player.lives <= 0 && player.shieldTimer <= 0)) {
+    return false;
+  }
+
+  const usedShield = player.shieldTimer > 0;
+  if (!usedShield) {
+    player.lives -= 1;
+  }
+
+  respawnPlayerAbovePlatform(lastSafePlatform);
+  player.shieldTimer = 1.4;
+  return true;
+}
+
+function respawnPlayerAbovePlatform(platform: Platform): void {
+  const targetY = platform.y - player.height - RESPAWN_DROP_HEIGHT;
+  const visibleY = cameraY + RESPAWN_TOP_PADDING;
+  const highestSafeY = platform.y - player.height - RESPAWN_PLATFORM_CLEARANCE;
+
+  player.x = clamp(platform.x + platform.width / 2 - player.width / 2, 0, GAME_WIDTH - player.width);
+  player.y = Math.min(Math.max(targetY, visibleY), highestSafeY);
+  player.previousY = player.y;
+  player.vx = 0;
+  player.vy = RESPAWN_FALL_SPEED;
 }
 
 function draw(): void {
@@ -841,9 +895,98 @@ function runHighScoreSelfTest(): string {
   return "OK highscore localStorage okunuyor ve geri yükleniyor.";
 }
 
+function runFoodSpawnSelfTest(): string {
+  seedWorld();
+  player.lives = MAX_FOOD_LIVES;
+  collectibles = [];
+  const platform = createPlatform(120, 420, 96);
+  const collectible = maybeCreateCollectible(platform, 12, () => 0);
+
+  if (collectible?.kind === "food") {
+    throw new Error("Mama 3 iken yeni mama tası üretildi.");
+  }
+
+  player.lives = 0;
+  collectibles = [
+    { id: collectibleId++, x: 120, y: 320, kind: "food", collected: false },
+    { id: collectibleId++, x: 160, y: 240, kind: "food", collected: false },
+    { id: collectibleId++, x: 200, y: 160, kind: "food", collected: false }
+  ];
+
+  if (canSpawnFoodCollectible()) {
+    throw new Error("Sahada 3 mama varken yeni mama izni açık kaldı.");
+  }
+
+  return "OK mama üretimi 3 sınırına uyuyor.";
+}
+
+function runWallSelfTest(): string {
+  seedWorld();
+  player.x = -24;
+  player.vx = -180;
+  resolvePlayerBounds();
+  const leftOk = player.x === 0 && player.vx === 0;
+
+  player.x = GAME_WIDTH + 12;
+  player.vx = 180;
+  resolvePlayerBounds();
+  const rightOk = player.x === GAME_WIDTH - player.width && player.vx === 0;
+
+  if (!leftOk || !rightOk) {
+    throw new Error("Duvar sınırı Venus'u oyun alanında tutamadı.");
+  }
+
+  return "OK kenarlar duvar gibi çalışıyor.";
+}
+
+function runRespawnSelfTest(): string {
+  seedWorld();
+  cameraY = 0;
+  const platform = createPlatform(120, 420, 96);
+  respawnPlayerAbovePlatform(platform);
+
+  const gap = platform.y - (player.y + player.height);
+  const centeredX = platform.x + platform.width / 2 - player.width / 2;
+  const ok =
+    Math.abs(player.x - centeredX) < 0.01 &&
+    gap >= RESPAWN_PLATFORM_CLEARANCE &&
+    gap <= RESPAWN_DROP_HEIGHT &&
+    player.vy === RESPAWN_FALL_SPEED;
+
+  if (!ok) {
+    throw new Error("Respawn düşüş konumu beklenen aralıkta değil.");
+  }
+
+  return `OK respawn platformun ${Math.round(gap)}px üstünden düşüyor.`;
+}
+
+function runShieldRecoverySelfTest(): string {
+  seedWorld();
+  screen = "playing";
+  player.lives = 2;
+  player.shieldTimer = 3;
+  player.y = cameraY + GAME_HEIGHT + 100;
+  checkFall();
+
+  const gap = lastSafePlatform ? lastSafePlatform.y - (player.y + player.height) : 0;
+  const ok = screen === "playing" && player.lives === 2 && player.vy === RESPAWN_FALL_SPEED && gap > RESPAWN_PLATFORM_CLEARANCE;
+
+  if (!ok) {
+    throw new Error("Zil kurtarması yukarıdan düşüş davranışına geçmedi.");
+  }
+
+  return `OK zil kurtarması ${Math.round(gap)}px üstten düşürüyor.`;
+}
+
 function setDebugOutput(message: string): void {
   if (debugOutput) {
     debugOutput.textContent = message;
+  }
+}
+
+function preventCanvasDefault(event: Event): void {
+  if (event.cancelable) {
+    event.preventDefault();
   }
 }
 
@@ -870,16 +1013,18 @@ document.addEventListener("keyup", (event) => {
 canvas.addEventListener(
   "touchstart",
   (event) => {
+    preventCanvasDefault(event);
     const touch = event.changedTouches[0];
     touchStartX = touch.clientX;
     touchStartY = touch.clientY;
   },
-  { passive: true }
+  { passive: false }
 );
 
 canvas.addEventListener(
   "touchmove",
   (event) => {
+    preventCanvasDefault(event);
     const touch = event.changedTouches[0];
     const dx = touch.clientX - touchStartX;
     const dy = touch.clientY - touchStartY;
@@ -887,18 +1032,29 @@ canvas.addEventListener(
       inputDirection = dx > 0 ? 1 : -1;
     }
   },
-  { passive: true }
+  { passive: false }
 );
 
 canvas.addEventListener(
   "touchend",
-  () => {
+  (event) => {
+    preventCanvasDefault(event);
     inputDirection = 0;
   },
-  { passive: true }
+  { passive: false }
+);
+
+canvas.addEventListener(
+  "touchcancel",
+  (event) => {
+    preventCanvasDefault(event);
+    inputDirection = 0;
+  },
+  { passive: false }
 );
 
 canvas.addEventListener("pointerdown", (event) => {
+  preventCanvasDefault(event);
   pointerActive = true;
   pointerStartX = event.clientX;
   pointerStartY = event.clientY;
@@ -906,6 +1062,7 @@ canvas.addEventListener("pointerdown", (event) => {
 });
 
 canvas.addEventListener("pointermove", (event) => {
+  preventCanvasDefault(event);
   if (!pointerActive) {
     return;
   }
@@ -921,12 +1078,26 @@ canvas.addEventListener("pointermove", (event) => {
 });
 
 canvas.addEventListener("pointerup", (event) => {
+  preventCanvasDefault(event);
   pointerActive = false;
   inputDirection = 0;
   if (canvas.hasPointerCapture(event.pointerId)) {
     canvas.releasePointerCapture(event.pointerId);
   }
 });
+
+canvas.addEventListener("pointercancel", (event) => {
+  preventCanvasDefault(event);
+  pointerActive = false;
+  inputDirection = 0;
+  if (canvas.hasPointerCapture(event.pointerId)) {
+    canvas.releasePointerCapture(event.pointerId);
+  }
+});
+
+canvas.addEventListener("contextmenu", preventCanvasDefault);
+canvas.addEventListener("selectstart", preventCanvasDefault);
+canvas.addEventListener("dragstart", preventCanvasDefault);
 
 document.querySelector<HTMLButtonElement>("[data-testid='debug-generator']")?.addEventListener("click", () => {
   try {
@@ -977,6 +1148,10 @@ declare global {
       validateGenerator: () => string;
       runBonusSelfTest: () => string;
       runHighScoreSelfTest: () => string;
+      runFoodSpawnSelfTest: () => string;
+      runWallSelfTest: () => string;
+      runRespawnSelfTest: () => string;
+      runShieldRecoverySelfTest: () => string;
       startGame: () => void;
     };
   }
@@ -986,5 +1161,9 @@ window.venusDebug = {
   validateGenerator,
   runBonusSelfTest,
   runHighScoreSelfTest,
+  runFoodSpawnSelfTest,
+  runWallSelfTest,
+  runRespawnSelfTest,
+  runShieldRecoverySelfTest,
   startGame
 };

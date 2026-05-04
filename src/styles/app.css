@@ -20,6 +20,7 @@
 
 * {
   box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
 }
 
 html,
@@ -29,15 +30,22 @@ body,
   height: 100%;
   margin: 0;
   overflow: hidden;
+  overscroll-behavior: none;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 body {
   min-width: 320px;
   min-height: 100dvh;
+  touch-action: none;
 }
 
 button {
   font: inherit;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 .shell {
@@ -70,6 +78,10 @@ canvas {
   height: 100%;
   image-rendering: pixelated;
   touch-action: none;
+  -webkit-touch-callout: none;
+  -webkit-user-drag: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 .overlay {
