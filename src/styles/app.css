@@ -61,6 +61,7 @@ button {
 
 .game-frame {
   position: relative;
+  container-type: inline-size;
   width: min(100vw, 480px);
   height: min(100dvh, 860px);
   max-height: 100dvh;
@@ -246,14 +247,16 @@ canvas {
 }
 
 .hud {
+  --game-px: min(1px, calc(100cqw / 390));
+
   position: absolute;
-  top: 10px;
-  left: 10px;
-  right: 10px;
+  top: calc(10 * var(--game-px));
+  left: calc(10 * var(--game-px));
+  right: calc(10 * var(--game-px));
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 8px;
+  gap: calc(7 * var(--game-px));
   pointer-events: none;
 }
 
@@ -263,20 +266,25 @@ canvas {
 
 .hud-group {
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+  flex-wrap: nowrap;
+  gap: calc(5 * var(--game-px));
 }
 
 .pill {
-  min-width: 70px;
-  padding: 6px 9px;
-  border: 2px solid rgba(255, 209, 92, 0.34);
-  border-radius: 8px;
+  flex: 0 0 auto;
+  min-width: calc(58 * var(--game-px));
+  padding: calc(5 * var(--game-px)) calc(7 * var(--game-px));
+  border: max(1px, calc(2 * var(--game-px))) solid rgba(255, 209, 92, 0.34);
+  border-radius: calc(8 * var(--game-px));
   background: rgba(5, 12, 28, 0.62);
   color: var(--ink);
-  font-size: 0.82rem;
+  font-size: calc(12 * var(--game-px));
   font-weight: 800;
-  text-shadow: 0 2px 0 #000;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  text-align: center;
+  text-shadow: 0 calc(2 * var(--game-px)) 0 #000;
+  white-space: nowrap;
 }
 
 .debug-panel {
