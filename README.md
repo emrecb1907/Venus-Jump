@@ -10,9 +10,10 @@ The game is designed around a warm, hand-crafted pixel art style: chunky wooden 
 
 ## Screenshots
 
-![Venus Jump main menu](docs/images/venus-jump-menu.png)
-
-![Venus Jump gameplay](docs/images/venus-jump-gameplay.png)
+<p>
+  <img src="docs/images/venus-jump-menu.png" alt="Venus Jump main menu" width="260">
+  <img src="docs/images/venus-jump-gameplay.png" alt="Venus Jump gameplay" width="260">
+</p>
 
 ## Gameplay
 
