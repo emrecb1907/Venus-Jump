@@ -169,21 +169,29 @@ canvas {
 
 .menu-actions {
   display: grid;
-  width: min(100%, 260px);
-  gap: 10px;
+  width: min(100%, 270px);
+  gap: 8px;
 }
 
 .menu-button {
-  min-height: 48px;
-  border: 3px solid #281a18;
-  border-radius: 8px;
-  color: #231307;
-  background: linear-gradient(180deg, #fff19b 0%, var(--gold) 54%, #dc8b2d 100%);
-  box-shadow:
-    inset 0 2px 0 rgba(255, 255, 255, 0.5),
-    0 5px 0 #68381a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 58px;
+  padding: 0 28px;
+  border: 0;
+  border-radius: 0;
+  color: #2b1607;
+  background: url("/assets/ui/menu/menu-button-primary.png") center / 100% 100% no-repeat;
   cursor: pointer;
-  font-weight: 800;
+  font-size: 1rem;
+  font-weight: 900;
+  line-height: 1;
+  text-shadow:
+    0 1px 0 rgba(255, 250, 184, 0.7),
+    0 2px 0 rgba(103, 55, 20, 0.32);
+  filter: drop-shadow(0 5px 0 rgba(58, 28, 14, 0.58));
+  image-rendering: pixelated;
 }
 
 .menu-button:focus-visible {
@@ -193,17 +201,18 @@ canvas {
 
 .menu-button:active {
   transform: translateY(3px);
-  box-shadow:
-    inset 0 2px 0 rgba(255, 255, 255, 0.5),
-    0 2px 0 #68381a;
+  filter: drop-shadow(0 2px 0 rgba(58, 28, 14, 0.58)) brightness(0.96);
 }
 
 .menu-button--secondary {
   color: var(--ink);
-  background: linear-gradient(180deg, #315d7b 0%, #1a3658 58%, #11233e 100%);
-  box-shadow:
-    inset 0 2px 0 rgba(255, 255, 255, 0.18),
-    0 5px 0 #071126;
+  min-height: 52px;
+  padding: 0 28px;
+  background-image: url("/assets/ui/menu/menu-button-secondary.png");
+  text-shadow:
+    0 2px 0 #020617,
+    1px 0 0 #020617;
+  filter: drop-shadow(0 4px 0 rgba(2, 6, 23, 0.62));
 }
 
 .screen-title {
@@ -250,13 +259,10 @@ canvas {
   --game-px: min(1px, calc(100cqw / 390));
 
   position: absolute;
-  top: calc(10 * var(--game-px));
-  left: calc(10 * var(--game-px));
-  right: calc(10 * var(--game-px));
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: calc(7 * var(--game-px));
+  top: calc(7 * var(--game-px));
+  left: calc(8 * var(--game-px));
+  right: calc(8 * var(--game-px));
+  display: block;
   pointer-events: none;
 }
 
@@ -264,10 +270,157 @@ canvas {
   display: none;
 }
 
-.hud-group {
+.hud-bar {
+  position: relative;
+  display: block;
+  height: calc(54 * var(--game-px));
+  background: url("/assets/ui/hud/status-bar.png") center / 100% 100% no-repeat;
+  filter: drop-shadow(0 calc(4 * var(--game-px)) 0 rgba(0, 0, 0, 0.24));
+  image-rendering: pixelated;
+}
+
+.hud-stats,
+.hud-items,
+.hud-bonuses {
   display: flex;
-  flex-wrap: nowrap;
+  align-items: center;
+}
+
+.hud-stats {
+  position: absolute;
+  top: calc(31 * var(--game-px));
+  left: calc(48 * var(--game-px));
+  gap: calc(10 * var(--game-px));
+  min-width: 0;
+  transform: translateY(-50%);
+}
+
+.hud-items {
+  position: absolute;
+  top: calc(31 * var(--game-px));
+  right: calc(16 * var(--game-px));
+  gap: calc(7 * var(--game-px));
+  transform: translateY(-50%);
+}
+
+.hud-stat,
+.hud-food {
+  display: flex;
+  align-items: center;
+  height: calc(30 * var(--game-px));
+}
+
+.hud-stat {
   gap: calc(5 * var(--game-px));
+}
+
+.hud-stat--score {
+  min-width: calc(66 * var(--game-px));
+}
+
+.hud-stat--highscore {
+  min-width: calc(86 * var(--game-px));
+}
+
+.hud-food {
+  gap: calc(5 * var(--game-px));
+  min-width: calc(44 * var(--game-px));
+}
+
+.hud-icon,
+.hud-food-icon,
+.bonus-icon {
+  display: block;
+  flex: 0 0 auto;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: contain;
+  image-rendering: pixelated;
+}
+
+.hud-icon {
+  width: calc(26 * var(--game-px));
+  height: calc(26 * var(--game-px));
+  transform: none;
+}
+
+.hud-icon--score {
+  background-image: url("/assets/ui/hud/score-paw.png");
+}
+
+.hud-icon--highscore {
+  background-image: url("/assets/ui/hud/highscore-crown.png");
+  transform: none;
+}
+
+.hud-food-icon {
+  width: calc(26 * var(--game-px));
+  height: calc(26 * var(--game-px));
+  background-image: url("/assets/collectibles/cat-food.png");
+}
+
+.hud-value {
+  min-width: 0;
+  color: #fff8db;
+  font-family: "Trebuchet MS", "Avenir Next", system-ui, sans-serif;
+  font-size: calc(14 * var(--game-px));
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  text-align: left;
+  text-shadow:
+    0 calc(1 * var(--game-px)) 0 #000,
+    calc(1 * var(--game-px)) 0 0 #000;
+  white-space: nowrap;
+}
+
+.hud-value--highscore {
+  min-width: calc(42 * var(--game-px));
+}
+
+.hud-value--food {
+  min-width: calc(10 * var(--game-px));
+}
+
+.hud-bonuses {
+  gap: calc(2 * var(--game-px));
+}
+
+.bonus-slot {
+  position: relative;
+  width: calc(30 * var(--game-px));
+  height: calc(30 * var(--game-px));
+  background: url("/assets/ui/hud/bonus-slot.png") center / contain no-repeat;
+  filter: saturate(0.8) brightness(0.82);
+  image-rendering: pixelated;
+}
+
+.bonus-slot[data-active="true"] {
+  filter: saturate(1.12) brightness(1.08) drop-shadow(0 0 calc(4 * var(--game-px)) rgba(255, 209, 92, 0.54));
+}
+
+.bonus-icon {
+  position: absolute;
+  inset: calc(3 * var(--game-px));
+  opacity: 0.22;
+  transform: scale(0.86);
+}
+
+.bonus-slot[data-active="true"] .bonus-icon {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.bonus-icon--yarn {
+  background-image: url("/assets/collectibles/yarn-ball.png");
+}
+
+.bonus-icon--feather {
+  background-image: url("/assets/collectibles/feather.png");
+}
+
+.bonus-icon--bell {
+  background-image: url("/assets/collectibles/gold-bell.png");
 }
 
 .pill {
