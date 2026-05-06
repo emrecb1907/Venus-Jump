@@ -14,9 +14,13 @@ export function loadGameAssets(): GameAssets {
       loadImage(`${assetRoot}/rooms/bedroom.png`),
       loadImage(`${assetRoot}/rooms/city-passage.png`),
       loadImage(`${assetRoot}/rooms/sunroom.png`),
+      loadImage(`${assetRoot}/rooms/cat-playroom.png`),
+      loadImage(`${assetRoot}/rooms/daytime-living-room.png`),
       loadImage(`${assetRoot}/rooms/city-courtyard.png`),
       loadImage(`${assetRoot}/rooms/attic.png`),
-      loadImage(`${assetRoot}/rooms/city-backstreet.png`)
+      loadImage(`${assetRoot}/rooms/city-backstreet.png`),
+      loadImage(`${assetRoot}/rooms/rooftop-garden.png`),
+      loadImage(`${assetRoot}/rooms/meadow-plain.png`)
     ],
     platformImages: {
       normal: loadImage(`${assetRoot}/platforms/normal-shelf.png`),
